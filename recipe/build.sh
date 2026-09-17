@@ -46,14 +46,20 @@ presets = json.loads(path.read_text())
 preset = next(p for p in presets["configurePresets"] if p["name"] == "linux_conda_raspa3")
 flags = preset["cacheVariables"]["CMAKE_CXX_FLAGS_RELEASE"]
 mode = os.environ["NIGHTLY_DIAGNOSTIC_MODE"]
-assert mode in ("fast", "strict")
+assert mode in ("fast", "strict", "libcxx")
 if mode == "strict":
     assert "-ffast-math" in flags
     preset["cacheVariables"]["CMAKE_CXX_FLAGS_RELEASE"] = flags.replace("-ffast-math", "-fno-fast-math")
+if mode == "libcxx":
+    for key in ("CMAKE_CXX_FLAGS_RELEASE", "CMAKE_EXE_LINKER_FLAGS", "CMAKE_SHARED_LINKER_FLAGS"):
+        preset["cacheVariables"][key] = preset["cacheVariables"][key].replace("-stdlib=libstdc++", "-stdlib=libc++")
 print("Diagnostic mode:", mode)
 print("CMAKE_CXX_FLAGS_RELEASE:", preset["cacheVariables"]["CMAKE_CXX_FLAGS_RELEASE"])
 path.write_text(json.dumps(presets, indent=2) + "\n")
 PYFLAGS
+if [[ "$NIGHTLY_DIAGNOSTIC_MODE" == libcxx ]]; then
+  export CXXFLAGS="${CXXFLAGS:-} -stdlib=libc++"
+fi
 cmake -B build --preset="$preset" "${extra[@]}" \
   "-DCMAKE_BUILD_RPATH=$PREFIX/lib" "-DCMAKE_INSTALL_RPATH=$PREFIX/lib" \
   -DCMAKE_FIND_FRAMEWORK=LAST -DBLA_VENDOR=Generic \

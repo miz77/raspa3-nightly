@@ -27,6 +27,8 @@ requirements:
     - ${{ compiler('c') }}
     - ${{ compiler('cxx') }}
     - ${{ stdlib('c') }}
+    - if: diagnostic_mode == "libcxx"
+      then: libcxx-devel ==22.1.8
     - clang-scan-deps ==22.1.8
     - llvm-tools ==22.1.8
     - lld ==22.1.8
@@ -38,6 +40,10 @@ requirements:
     - if: osx
       then: libcxx-devel ==22.1.8
   host:
+    - if: diagnostic_mode == "libcxx"
+      then:
+        - libcxx-devel ==22.1.8
+        - libcxx ==22.1.8
     - if: osx
       then:
         - libcxx ==22.1.8
