@@ -1,0 +1,11 @@
+.pixi/
+.work/
+output/
+__pycache__/
+.ruff_cache/
+.DS_Store
+
+# Local planning and investigation notes
+/PLAN.md
+/VALIDATION.md
+/LICENSE-REVIEW.md

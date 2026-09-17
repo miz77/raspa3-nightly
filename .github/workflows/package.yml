@@ -1,0 +1,46 @@
+name: Fixed SHA packages
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: fixed-sha-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e
+        with:
+          pixi-version: v0.78.0
+          locked: true
+          cache: false
+      - name: Check code style and scripts
+        run: pixi run --locked lint
+      - run: |
+          pixi run --locked prepare --build-number 0 --output-dir .work/inputs/0
+          pixi run --locked prepare --build-number 1 --output-dir .work/inputs/1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fixed-inputs
+          path: .work/inputs/
+          include-hidden-files: true
+          if-no-files-found: error
+  mac:
+    needs: prepare
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      runner: macos-26
+      platform: osx-arm64
+  linux:
+    needs: [prepare, mac]
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      runner: ubuntu-24.04
+      platform: linux-64

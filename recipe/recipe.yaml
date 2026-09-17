@@ -1,0 +1,80 @@
+schema_version: 1
+package:
+  name: raspa3
+  version: ${{ upstream_version }}
+source:
+  - url: https://codeload.github.com/iRASPA/RASPA3/tar.gz/${{ upstream_sha }}
+    sha256: ${{ upstream_sha256 }}
+    target_directory: raspa3
+  - url: https://codeload.github.com/HDFGroup/hdf5/tar.gz/${{ hdf5_sha }}
+    sha256: ${{ hdf5_sha256 }}
+    target_directory: hdf5
+  - url: https://codeload.github.com/google/googletest/tar.gz/${{ gtest_sha }}
+    sha256: ${{ gtest_sha256 }}
+    target_directory: googletest
+build:
+  number: ${{ nightly_build_number }}
+  string: g${{ upstream_sha }}_r${{ configuration_hash }}_${{ hash }}_${{ nightly_build_number }}
+  skip: not (osx and arm64) and not (linux and x86_64)
+  script:
+    file: build.sh
+    env:
+      NIGHTLY_VERSION: ${{ upstream_version }}
+      NIGHTLY_MACOS_SDK: ${{ macos_sdk }}
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - ${{ stdlib('c') }}
+    - clang-scan-deps ==22.1.8
+    - llvm-tools ==22.1.8
+    - lld ==22.1.8
+    - cmake ==4.3.0
+    - ninja ==1.13.2
+    - python 3.12.*
+    - pkg-config
+    - perl
+    - if: osx
+      then: libcxx-devel ==22.1.8
+  host:
+    - if: osx
+      then:
+        - libcxx ==22.1.8
+        - llvm-openmp ==22.1.8
+        - khronos-opencl-icd-loader
+      else:
+        - libstdcxx-devel_linux-64 ==16.2.0
+        - libgomp
+        - ocl-icd
+    - libblas
+    - liblapack
+    - zlib
+    - openssl
+    - libcurl
+    - libaec
+    - libopencl-devel
+    - fftw
+  run:
+    - if: osx
+      then:
+        - khronos-opencl-icd-loader
+        - ocl_icd_wrapper_apple
+      else: ocl-icd
+tests:
+  - script:
+      - raspa3 --help
+      - raspa3-cli --help
+      - test -f "$PREFIX/share/raspa3/forcefields/example_molecule_forcefield/force_field.json"
+      - test -f "$PREFIX/share/raspa3/molecules/example_definitions/methane.json"
+about:
+  homepage: https://github.com/iRASPA/RASPA3
+  summary: Fixed-revision RASPA3 command-line programs and data
+  license: MIT
+  license_file:
+    - raspa3/LICENSE.md
+    - hdf5/LICENSE
+    - googletest/LICENSE
+    - FEEDSTOCK-LICENSE.txt
+extra:
+  upstream_sha: ${{ upstream_sha }}
+  configuration_hash: ${{ configuration_hash }}

@@ -1,0 +1,92 @@
+name: Native package build and test
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      platform:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 360
+    env:
+      PACKAGE_PLATFORM: ${{ inputs.platform }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e
+        with:
+          pixi-version: v0.78.0
+          locked: true
+          cache: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: fixed-inputs
+          path: .work/inputs
+      - name: Check frozen inputs and native host
+        shell: bash
+        run: |
+          pixi run --locked prepare --check --build-number 0 --output-dir .work/inputs/0
+          pixi run --locked prepare --check --build-number 1 --output-dir .work/inputs/1
+          uname -srm
+          pixi --version
+          pixi run --locked rattler-build --version
+          if [[ "$PACKAGE_PLATFORM" == osx-arm64 ]]; then
+            test "$(uname -m)" = arm64
+            xcrun --sdk macosx26.5 --show-sdk-path
+          else
+            test "$(uname -m)" = x86_64
+          fi
+      - name: Build old package (0)
+        uses: prefix-dev/rattler-build-action@a961db97575670e3f2bdb52ee6849a52fb1a1d6f
+        with:
+          rattler-build-version: v0.68.0
+          recipe-path: recipe/recipe.yaml
+          upload-artifact: false
+          build-args: >-
+            --variant-config .work/inputs/0/run-variants.yaml
+            --target-platform ${{ inputs.platform }}
+            --package-format conda --output-dir output/0 -c conda-forge
+            --exclude-newer 2026-09-15T23:27:08Z
+            --test skip
+      - name: Build new package (1)
+        uses: prefix-dev/rattler-build-action@a961db97575670e3f2bdb52ee6849a52fb1a1d6f
+        with:
+          rattler-build-version: v0.68.0
+          recipe-path: recipe/recipe.yaml
+          upload-artifact: false
+          build-args: >-
+            --variant-config .work/inputs/1/run-variants.yaml
+            --target-platform ${{ inputs.platform }}
+            --package-format conda --output-dir output/1 -c conda-forge
+            --exclude-newer 2026-09-15T23:27:08Z
+            --test skip
+      - name: Recipe tests, clean installation, calculation, relocation and Pixi update
+        shell: bash
+        run: |
+          pixi run --locked test-update \
+            --old output/0/"$PACKAGE_PLATFORM"/raspa3-*.conda \
+            --new output/1/"$PACKAGE_PLATFORM"/raspa3-*.conda
+      - name: Retain tested packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-${{ inputs.platform }}
+          path: output/*/${{ inputs.platform }}/*.conda
+          if-no-files-found: error
+          compression-level: 0
+      - name: Retain diagnostic records
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verification-${{ inputs.platform }}
+          include-hidden-files: true
+          path: |
+            .work/inputs/
+            .work/verify-*/result.json
+            .work/verify-*/**/*.log

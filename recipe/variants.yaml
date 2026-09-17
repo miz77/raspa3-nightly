@@ -1,0 +1,22 @@
+macos_sdk:
+  - "macosx26.5"
+c_compiler:
+  - clang
+cxx_compiler:
+  - clangxx
+c_compiler_version:
+  - if: osx
+    then: "22.1.8"
+    else: "22.1"
+cxx_compiler_version:
+  - if: osx
+    then: "22.1.8"
+    else: "22.1"
+c_stdlib:
+  - if: osx
+    then: macosx_deployment_target
+    else: sysroot
+c_stdlib_version:
+  - if: osx
+    then: "11.0"
+    else: "2.28"

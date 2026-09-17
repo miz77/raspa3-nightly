@@ -1,0 +1,40 @@
+[workspace]
+name = "raspa3-nightly"
+version = "0.1.0"
+description = "Fixed-revision RASPA3 conda packaging"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+requires-pixi = "==0.78.0"
+
+[dependencies]
+python = "3.12.*"
+rattler-build = "==0.68.0"
+pyyaml = "6.*"
+conda-index = "0.7.*"
+conda-package-handling = "2.*"
+actionlint = "1.7.*"
+ruff = "==0.16.7"
+shellcheck = "==0.11.0"
+
+[tasks]
+prepare = "python scripts/prepare.py"
+validate = "rattler-build build --recipe recipe/recipe.yaml --variant-config .work/run-variants.yaml --render-only --with-solve --exclude-newer 2026-09-15T23:27:08Z -c conda-forge"
+check-inputs = "python scripts/prepare.py --check"
+build = { cmd = "rattler-build build --recipe recipe/recipe.yaml --variant-config .work/run-variants.yaml --package-format conda --output-dir output --exclude-newer 2026-09-15T23:27:08Z --test skip -c conda-forge", depends-on = ["check-inputs"] }
+verify = "python scripts/verify.py"
+test-update = "python scripts/verify.py --test-update"
+format = """
+ruff check --target-version py312 --select I --fix scripts &&
+ruff format --target-version py312 scripts &&
+shfmt -w -i 2 -ci recipe/*.sh
+"""
+lint = """
+ruff check --target-version py312 --extend-select I scripts &&
+ruff format --target-version py312 --check scripts &&
+shfmt -d -i 2 -ci recipe/*.sh &&
+shellcheck recipe/*.sh &&
+actionlint .github/workflows/package.yml .github/workflows/build-platform.yml
+"""
+
+[pypi-dependencies]
+shfmt-py = "==4.2.0"
