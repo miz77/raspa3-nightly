@@ -35,6 +35,25 @@ test "$build_platform" = "$target_platform"
 cmake --version
 "$CXX" --version
 "$BUILD_PREFIX/bin/clang-scan-deps" --version
+# Diagnostic branch only: keep the source and all other flags identical.
+"$BUILD_PREFIX/bin/python" - <<'PYFLAGS'
+import json
+import os
+from pathlib import Path
+
+path = Path("CMakePresets.json")
+presets = json.loads(path.read_text())
+preset = next(p for p in presets["configurePresets"] if p["name"] == "linux_conda_raspa3")
+flags = preset["cacheVariables"]["CMAKE_CXX_FLAGS_RELEASE"]
+mode = os.environ["NIGHTLY_DIAGNOSTIC_MODE"]
+assert mode in ("fast", "strict")
+if mode == "strict":
+    assert "-ffast-math" in flags
+    preset["cacheVariables"]["CMAKE_CXX_FLAGS_RELEASE"] = flags.replace("-ffast-math", "-fno-fast-math")
+print("Diagnostic mode:", mode)
+print("CMAKE_CXX_FLAGS_RELEASE:", preset["cacheVariables"]["CMAKE_CXX_FLAGS_RELEASE"])
+path.write_text(json.dumps(presets, indent=2) + "\n")
+PYFLAGS
 cmake -B build --preset="$preset" "${extra[@]}" \
   "-DCMAKE_BUILD_RPATH=$PREFIX/lib" "-DCMAKE_INSTALL_RPATH=$PREFIX/lib" \
   -DCMAKE_FIND_FRAMEWORK=LAST -DBLA_VENDOR=Generic \
@@ -49,9 +68,43 @@ cmake -B build --preset="$preset" "${extra[@]}" \
   -DBUILD_APP=ON -DBUILD_CLI=ON -DBUILD_TESTING=ON \
   -DBUILD_PYTHON=OFF -DBUILD_MAC_PACKAGE=OFF -DBUILD_DOXYGEN=OFF -DBUILD_BENCHMARKS=OFF
 cmake --build build --parallel 4
-# Every registered RASPA test, including all six suites. HDF5's separate suite
-# is not implicitly included just because it also uses BUILD_TESTING.
-ctest --test-dir build/tests --output-on-failure --no-tests=error --timeout 3600 --parallel 4
+# Diagnostic subset only; this is not a replacement for full validation.
+mkdir -p diagnostics
+cp build/CMakeCache.txt CMakePresets.json diagnostics/
+"$BUILD_PREFIX/bin/python" - <<'PYSELECT'
+import json
+import subprocess
+from pathlib import Path
+
+names = {
+    "exact_sphere_sweep.pruning_keeps_one_of_a_pair_of_equals_and_the_order_of_the_rest",
+    "thermobarostat.initialization_recomputes_mass_after_dof_constraint",
+    "hybrid_mc.flexible_framework_only_does_not_throw_and_restores_on_reject",
+    "minimization_variable_cell.rigid_charged_mixed_blocks_match_finite_difference",
+    "minimization_variable_cell.polarization_rigid_molecule_real_space_matches_finite_difference",
+    "vdw_potentials.second_order_taylor_shifted_spatial_derivatives_match_finite_difference",
+    "MC_SEMI_FLEXIBLE_CBMC.pentane_muvt_geometry_molecular_dynamics",
+    "MC_SEMI_FLEXIBLE_CBMC.pentane_mupt_geometry_molecular_dynamics",
+}
+names = {name + ".noArgs" for name in names}
+result = subprocess.run(["ctest", "--test-dir", "build/tests", "--show-only=json-v1"], check=True, capture_output=True, text=True)
+registered = {test["name"] for test in json.loads(result.stdout)["tests"]}
+assert names <= registered, names - registered
+Path("diagnostics/selected-tests.txt").write_text("\n".join(sorted(names)) + "\n")
+Path("diagnostics/registered-tests.json").write_text(result.stdout)
+PYSELECT
+status=0
+for round in 1 2 3; do
+  ctest --test-dir build/tests --tests-from-file "$PWD/diagnostics/selected-tests.txt" \
+    --output-on-failure --no-tests=error --timeout 600 --parallel 4 \
+    --output-junit "$PWD/diagnostics/round-$round.xml" 2>&1 | tee "diagnostics/round-$round.log" || status=1
+  cp build/tests/Testing/Temporary/LastTest.log "diagnostics/LastTest-$round.log"
+done
+printf '%s\n' "$status" >diagnostics/test-exit-status.txt
+# Preserve an honest failure, without bypassing any production gate.
+if ((status != 0)); then
+  exit "$status"
+fi
 cmake --install build --component app
 cmake --install build --component cli
 mkdir -p "$PREFIX/libexec/raspa3" "$PREFIX/share/raspa3/examples/methane-in-box"

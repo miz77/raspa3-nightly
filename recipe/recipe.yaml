@@ -19,6 +19,7 @@ build:
   script:
     file: build.sh
     env:
+      NIGHTLY_DIAGNOSTIC_MODE: ${{ diagnostic_mode }}
       NIGHTLY_VERSION: ${{ upstream_version }}
       NIGHTLY_MACOS_SDK: ${{ macos_sdk }}
 requirements:

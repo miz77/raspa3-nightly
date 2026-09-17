@@ -1,0 +1,53 @@
+name: Diagnose Linux regression failures
+on:
+  push:
+    branches: [diagnose/linux-regressions]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [fast, strict]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e
+        with:
+          pixi-version: v0.78.0
+          locked: true
+          cache: false
+      - name: Prepare identical pinned source and dependencies
+        env:
+          DIAGNOSTIC_MODE: ${{ matrix.mode }}
+        run: |
+          test "$(uname -m)" = x86_64
+          pixi run --locked prepare
+          printf '\ndiagnostic_mode:\n  - %s\n' "$DIAGNOSTIC_MODE" >> .work/run-variants.yaml
+      - name: Build and repeat the eight existing failed tests
+        uses: prefix-dev/rattler-build-action@a961db97575670e3f2bdb52ee6849a52fb1a1d6f
+        with:
+          rattler-build-version: v0.68.0
+          recipe-path: recipe/recipe.yaml
+          upload-artifact: false
+          build-args: >-
+            --variant-config .work/run-variants.yaml
+            --target-platform linux-64 --package-format conda
+            --output-dir output -c conda-forge
+            --exclude-newer 2026-09-15T23:27:08Z --test skip --keep-build
+      - name: Retain diagnostics even when tests fail
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-diagnostics-${{ matrix.mode }}
+          include-hidden-files: true
+          if-no-files-found: warn
+          path: |
+            .work/run.json
+            .work/run-variants.yaml
+            output/**/diagnostics/**
+            output/**/conda-meta/*.json
