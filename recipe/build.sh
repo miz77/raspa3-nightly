@@ -60,6 +60,20 @@ PYFLAGS
 if [[ "$NIGHTLY_DIAGNOSTIC_MODE" == libcxx ]]; then
   export CXXFLAGS="${CXXFLAGS:-} -stdlib=libc++"
 fi
+"$BUILD_PREFIX/bin/python" - <<'PYPROBE'
+import os
+from pathlib import Path
+
+for probe, target in {
+    "geometry": "tests/structurekit-tests/exact_sphere_sweep.cpp",
+    "hessian": "tests/raspakit-tests/minimization_variable_cell.cpp",
+    "vdw": "tests/raspakit-tests/vdw_potentials.cpp",
+}.items():
+    path = Path(target)
+    original = path.read_text()
+    assert "TEST(diagnostics," not in original
+    path.write_text(original + (Path(os.environ["RECIPE_DIR"]) / "diagnostic-probes" / f"{probe}.cpp").read_text())
+PYPROBE
 cmake -B build --preset="$preset" "${extra[@]}" \
   "-DCMAKE_BUILD_RPATH=$PREFIX/lib" "-DCMAKE_INSTALL_RPATH=$PREFIX/lib" \
   -DCMAKE_FIND_FRAMEWORK=LAST -DBLA_VENDOR=Generic \
@@ -106,6 +120,10 @@ for round in 1 2 3; do
     --output-junit "$PWD/diagnostics/round-$round.xml" 2>&1 | tee "diagnostics/round-$round.log" || status=1
   cp build/tests/Testing/Temporary/LastTest.log "diagnostics/LastTest-$round.log"
 done
+ctest --test-dir build/tests -R '^diagnostics\.' --verbose --no-tests=error --timeout 600 \
+  --output-junit "$PWD/diagnostics/probes.xml" 2>&1 | tee diagnostics/probes.log || status=1
+lscpu >diagnostics/cpu.txt
+ldd build/tests/raspakit-tests/unit_tests_raspakit >diagnostics/linked-libraries.txt
 printf '%s\n' "$status" >diagnostics/test-exit-status.txt
 # Preserve an honest failure, without bypassing any production gate.
 if ((status != 0)); then
