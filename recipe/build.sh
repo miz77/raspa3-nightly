@@ -124,6 +124,11 @@ ctest --test-dir build/tests -R '^diagnostics\.' --verbose --no-tests=error --ti
   --output-junit "$PWD/diagnostics/probes.xml" 2>&1 | tee diagnostics/probes.log || status=1
 lscpu >diagnostics/cpu.txt
 ldd build/tests/raspakit-tests/unit_tests_raspakit >diagnostics/linked-libraries.txt
+# Keep the uninstrumented test executable and its exact machine code.
+cp build/tests/raspakit-tests/unit_tests_raspakit diagnostics/unit_tests_raspakit
+"$BUILD_PREFIX/bin/llvm-objdump" --disassemble --demangle diagnostics/unit_tests_raspakit | gzip >diagnostics/disassembly.txt.gz
+"$BUILD_PREFIX/bin/llvm-nm" --demangle --numeric-sort diagnostics/unit_tests_raspakit >diagnostics/symbols.txt
+cp build/tests/raspakit-tests/CMakeFiles/unit_tests_raspakit.dir/integrators.cpp.o diagnostics/integrators.cpp.o
 printf '%s\n' "$status" >diagnostics/test-exit-status.txt
 # Preserve an honest failure, without bypassing any production gate.
 if ((status != 0)); then
