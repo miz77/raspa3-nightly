@@ -61,7 +61,11 @@ if [[ "$NIGHTLY_DIAGNOSTIC_MODE" == libcxx ]]; then
   export CXXFLAGS="${CXXFLAGS:-} -stdlib=libc++"
 fi
 
+test -x "$BUILD_PREFIX/bin/llvm-ar"
+test -x "$BUILD_PREFIX/bin/llvm-ranlib"
 cmake -B build --preset="$preset" "${extra[@]}" \
+  "-DCMAKE_C_COMPILER_AR=$BUILD_PREFIX/bin/llvm-ar" \
+  "-DCMAKE_C_COMPILER_RANLIB=$BUILD_PREFIX/bin/llvm-ranlib" \
   "-DCMAKE_BUILD_RPATH=$PREFIX/lib" "-DCMAKE_INSTALL_RPATH=$PREFIX/lib" \
   -DCMAKE_FIND_FRAMEWORK=LAST -DBLA_VENDOR=Generic \
   "-DBLAS_LIBRARIES=$PREFIX/lib/libblas.$library_suffix" \
@@ -74,10 +78,10 @@ cmake -B build --preset="$preset" "${extra[@]}" \
   -DHDF5_ALLOW_EXTERNAL_SUPPORT=NO \
   -DBUILD_APP=ON -DBUILD_CLI=ON -DBUILD_TESTING=ON \
   -DBUILD_PYTHON=OFF -DBUILD_MAC_PACKAGE=OFF -DBUILD_DOXYGEN=OFF -DBUILD_BENCHMARKS=OFF
-cmake --build build --parallel 4
-# Diagnostic subset only; this is not a replacement for full validation.
 mkdir -p diagnostics
 cp build/CMakeCache.txt CMakePresets.json diagnostics/
+cmake --build build --parallel 4
+# Diagnostic subset only; this is not a replacement for full validation.
 "$BUILD_PREFIX/bin/python" - <<'PYSELECT'
 import json
 import subprocess
