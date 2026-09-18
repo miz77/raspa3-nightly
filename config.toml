@@ -1,7 +1,7 @@
 # Fixed input for stage 2. No HEAD lookup or publication here.
-upstream_sha = "7ebe84e9b76f83298c3f5d0452041e7903324be0"
+upstream_sha = "383e67e0aedebf4080428888fbfa2cc06ba52cd4"
 upstream_version = "3.1.0"
-upstream_sha256 = "c0fa281426ac8d92fe279642a93f26f6b55d53ea293f234c31a5844aee014d51"
+upstream_sha256 = "50b7afc07f50eb3b8df855e360e0b48d218464e35fea3ca58612d4e7c15f8133"
 hdf5_sha = "4fde4fd787744b6a19b12032f4dad0383fbe6fbd"
 hdf5_sha256 = "096bf04114fc539138a663cb16892e694741cdb678cf3e59655ea11831fc19a4"
 gtest_sha = "52eb8108c5bdec04579160ae17225d66034bd723"

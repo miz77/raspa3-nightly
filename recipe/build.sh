@@ -60,20 +60,7 @@ PYFLAGS
 if [[ "$NIGHTLY_DIAGNOSTIC_MODE" == libcxx ]]; then
   export CXXFLAGS="${CXXFLAGS:-} -stdlib=libc++"
 fi
-"$BUILD_PREFIX/bin/python" - <<'PYPROBE'
-import os
-from pathlib import Path
 
-for probe, target in {
-    "geometry": "tests/structurekit-tests/exact_sphere_sweep.cpp",
-    "hessian": "tests/raspakit-tests/minimization_variable_cell.cpp",
-    "vdw": "tests/raspakit-tests/vdw_potentials.cpp",
-}.items():
-    path = Path(target)
-    original = path.read_text()
-    assert "TEST(diagnostics," not in original
-    path.write_text(original + (Path(os.environ["RECIPE_DIR"]) / "diagnostic-probes" / f"{probe}.cpp").read_text())
-PYPROBE
 cmake -B build --preset="$preset" "${extra[@]}" \
   "-DCMAKE_BUILD_RPATH=$PREFIX/lib" "-DCMAKE_INSTALL_RPATH=$PREFIX/lib" \
   -DCMAKE_FIND_FRAMEWORK=LAST -DBLA_VENDOR=Generic \
@@ -97,14 +84,7 @@ import subprocess
 from pathlib import Path
 
 names = {
-    "exact_sphere_sweep.pruning_keeps_one_of_a_pair_of_equals_and_the_order_of_the_rest",
     "thermobarostat.initialization_recomputes_mass_after_dof_constraint",
-    "hybrid_mc.flexible_framework_only_does_not_throw_and_restores_on_reject",
-    "minimization_variable_cell.rigid_charged_mixed_blocks_match_finite_difference",
-    "minimization_variable_cell.polarization_rigid_molecule_real_space_matches_finite_difference",
-    "vdw_potentials.second_order_taylor_shifted_spatial_derivatives_match_finite_difference",
-    "MC_SEMI_FLEXIBLE_CBMC.pentane_muvt_geometry_molecular_dynamics",
-    "MC_SEMI_FLEXIBLE_CBMC.pentane_mupt_geometry_molecular_dynamics",
 }
 names = {name + ".noArgs" for name in names}
 result = subprocess.run(["ctest", "--test-dir", "build/tests", "--show-only=json-v1"], check=True, capture_output=True, text=True)
@@ -120,15 +100,34 @@ for round in 1 2 3; do
     --output-junit "$PWD/diagnostics/round-$round.xml" 2>&1 | tee "diagnostics/round-$round.log" || status=1
   cp build/tests/Testing/Temporary/LastTest.log "diagnostics/LastTest-$round.log"
 done
-ctest --test-dir build/tests -R '^diagnostics\.' --verbose --no-tests=error --timeout 600 \
-  --output-junit "$PWD/diagnostics/probes.xml" 2>&1 | tee diagnostics/probes.log || status=1
 lscpu >diagnostics/cpu.txt
 ldd build/tests/raspakit-tests/unit_tests_raspakit >diagnostics/linked-libraries.txt
-# Keep the uninstrumented test executable and its exact machine code.
-cp build/tests/raspakit-tests/unit_tests_raspakit diagnostics/unit_tests_raspakit
-"$BUILD_PREFIX/bin/llvm-objdump" --disassemble --demangle diagnostics/unit_tests_raspakit | gzip >diagnostics/disassembly.txt.gz
-"$BUILD_PREFIX/bin/llvm-nm" --demangle --numeric-sort diagnostics/unit_tests_raspakit >diagnostics/symbols.txt
-cp build/tests/raspakit-tests/CMakeFiles/unit_tests_raspakit.dir/integrators.cpp.o diagnostics/integrators.cpp.o
+# Retain only the relevant disassembly, keeping downloadable diagnostics small.
+"$BUILD_PREFIX/bin/python" - <<'PYASM'
+import os
+import re
+import subprocess
+from pathlib import Path
+
+with Path("diagnostics/thermobarostat-assembly.txt").open("w") as out:
+    process = subprocess.Popen(
+        [str(Path(os.environ["BUILD_PREFIX"]) / "bin/llvm-objdump"),
+         "--disassemble", "--demangle", "build/tests/raspakit-tests/unit_tests_raspakit"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    keep = False
+    for line in process.stdout:
+        if re.match(r"^[0-9a-f]+ <.*>:$", line.rstrip()):
+            keep = any(key in line for key in (
+                "initialization_recomputes_mass_after_dof_constraint_Test::TestBody()",
+                "Thermobarostat@thermobarostat::refreshDegreesOfFreedom(",
+                "Thermobarostat@thermobarostat::initialize(",
+                "_GLOBAL__sub_I_units.cpp",
+            ))
+        if keep:
+            out.write(line)
+    assert process.wait() == 0
+PYASM
 printf '%s\n' "$status" >diagnostics/test-exit-status.txt
 # Preserve an honest failure, without bypassing any production gate.
 if ((status != 0)); then

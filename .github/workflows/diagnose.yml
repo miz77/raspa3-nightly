@@ -1,4 +1,4 @@
-name: Diagnose Linux regression failures
+name: Verify latest upstream Thermobarostat test
 on:
   push:
     branches: [diagnose/linux-regressions]
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [fast, libcxx]
+        mode: [fast, strict]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -28,7 +28,7 @@ jobs:
           test "$(uname -m)" = x86_64
           pixi run --locked prepare
           printf '\ndiagnostic_mode:\n  - %s\n' "$DIAGNOSTIC_MODE" >> .work/run-variants.yaml
-      - name: Build and repeat the eight existing failed tests
+      - name: Build latest pinned upstream and repeat the Thermobarostat test
         uses: prefix-dev/rattler-build-action@a961db97575670e3f2bdb52ee6849a52fb1a1d6f
         with:
           rattler-build-version: v0.68.0
