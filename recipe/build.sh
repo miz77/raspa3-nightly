@@ -76,11 +76,11 @@ cmake -B build --preset="$preset" "${extra[@]}" \
   -DFETCHCONTENT_SOURCE_DIR_GOOGLETEST="$SRC_DIR/googletest" \
   -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
   -DHDF5_ALLOW_EXTERNAL_SUPPORT=NO \
-  -DBUILD_APP=ON -DBUILD_CLI=ON -DBUILD_TESTING=ON \
+  -DBUILD_APP=ON -DBUILD_TESTING=ON \
   -DBUILD_PYTHON=OFF -DBUILD_MAC_PACKAGE=OFF -DBUILD_DOXYGEN=OFF -DBUILD_BENCHMARKS=OFF
 mkdir -p diagnostics
 cp build/CMakeCache.txt CMakePresets.json diagnostics/
-cmake --build build --parallel 4
+cmake --build build --target raspa3 unit_tests_raspakit --parallel 4
 # Diagnostic subset only; this is not a replacement for full validation.
 "$BUILD_PREFIX/bin/python" - <<'PYSELECT'
 import json
@@ -138,11 +138,8 @@ if ((status != 0)); then
   exit "$status"
 fi
 cmake --install build --component app
-cmake --install build --component cli
 mkdir -p "$PREFIX/libexec/raspa3" "$PREFIX/share/raspa3/examples/methane-in-box"
-for command in raspa3 raspa3-cli; do
-  mv "$PREFIX/bin/$command" "$PREFIX/libexec/raspa3/$command"
-  install -m 755 "$RECIPE_DIR/launcher.sh" "$PREFIX/bin/$command"
-done
+mv "$PREFIX/bin/raspa3" "$PREFIX/libexec/raspa3/raspa3"
+install -m 755 "$RECIPE_DIR/launcher.sh" "$PREFIX/bin/raspa3"
 cp examples/basic/1_mc_methane_in_box/{simulation.json,force_field.json,methane.json} \
   "$PREFIX/share/raspa3/examples/methane-in-box/"
